@@ -15,5 +15,8 @@ for i in range(110, values[4][0] - 3):
 
 values.append(struct.unpack("h", bin_data.read(struct.calcsize("h"))))
 
+for i in range(len(values)):
+    if len(values[i]) == 1:
+        values[i] = values[i][0]
 
-print(values, len(values))
+print(values)
