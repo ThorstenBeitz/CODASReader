@@ -149,7 +149,7 @@ class BinaryReader:
             trailer_pointers.append(trailer_item)
         trailer.append(trailer_pointers)
         
-        #translating second part of trailer containing user annotations
+        #translating second part of trailer containing user annotations, null character (0) ends each annotation
         #values[7] stores number of user annotations
         trailer_annotations = []
         trailer_item = ""
@@ -162,6 +162,19 @@ class BinaryReader:
             else:
                 trailer_item = trailer_item + chr(int(trailer_byte))
         trailer.append(trailer_annotations)
+
+        #translating all remaining bytes as event marker comment part of the trailer, code works similiarly to user annotation above
+        trailer_item = ""
+        trailer_comments_list = []
+        trailer_comments = bin_data.read()
+        for i in range(len(trailer_comments)):
+            trailer_byte = struct.unpack("<b", trailer_comments[i])[0]
+            if int(trailer_byte) == 0:
+                trailer_comments_list.append(trailer_item)
+                trailer_item = ""
+            else:
+                trailer_item = trailer_item + chr(int(trailer_byte))
+        trailer.append(trailer_comments_list)
 
         #returns a TranslatedFile object with the translated three main parts of the file as attributes
         return(TranslatedFile(values, adc_data, trailer))
@@ -199,6 +212,9 @@ class TranslatedFile:
         print("User annotations")
         for i, item in enumerate(self.trailer[1]):
             print("Channel No. " + str(i) + " annotation: " + str(item))
+        print("Event marker comments: ")
+        for item in self.trailer[2]:
+            print(item)
 
     #print total length of header in bytes (stored in header[4])
     def printHeaderLength(self):
