@@ -80,6 +80,16 @@ class BinaryReader:
         else:
             adc_data_lim = int(values[5])
 
+        #determining whether file is hiRes and uses 16 bit data (stored in bit 14 of values[26])
+        if int(values[26][14]) == 1:
+            hiRes = True
+            adc_bit_length = 16
+            channels_hiRes = 1
+        else:
+            hiRes = False
+            adc_bit_length = 14
+            channels_hiRes = acq_channels
+
         #creating the adc data from the main body of the binary file
         adc_data = []
         for i in range(int(adc_data_lim / (2 * acq_channels))):
@@ -91,10 +101,10 @@ class BinaryReader:
                 #then corectly converting the relevant bits back to decimal and adding them to item list
                 #values[33] corresponds to first channel information, values[33][2] calibration scaling factor
                 if int(adc_data_bin[0]) == 0:
-                    adc_data_bin = int(adc_data_bin[1:14], 2) * values[33 + k][2]
+                    adc_data_bin = int(adc_data_bin[1:adc_bit_length], 2) * values[33 + k][2]
                 else:
                     #converting negative two's complement binary to decimal
-                    adc_data_bin = (int(adc_data_bin[1:14], 2) - (1 << len(adc_data_bin[1:14]))) * values[33 + k][2]
+                    adc_data_bin = (int(adc_data_bin[1:adc_bit_length], 2) - (1 << len(adc_data_bin[1:adc_bit_length]))) * values[33 + k][2]
                 adc_data_item.append(adc_data_bin)
             #appending date and time to the item list, values[13] stores time of start of measurement,
             #values[12] stores time between measurements
@@ -124,7 +134,7 @@ class BinaryReader:
             else:
                 #determine whether next long is comment pointer or new marker pointer
                 trailer_long = struct.unpack("<l", bin_data.read(4))[0]
-                if trailer_long > -1 * values[5] / (2 * acq_channels):
+                if trailer_long > -1 * values[5] / (2 * channels_hiRes):
                     trailer_pointers.append(trailer_item)
                     trailer_item = [trailer_long]
                     if trailer_item[-1] >= 0:
