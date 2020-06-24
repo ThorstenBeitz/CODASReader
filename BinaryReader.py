@@ -62,8 +62,11 @@ class BinaryReader:
         if int(values[26][1]) == 1:
             packed = True
 
-        #number of acquired channels (stored in the last 5 bits of values[0])
-        acq_channels = int(values[0][-5:], 2)
+        #number of acquired channels (stored in the last 5 (or 8) bits of values[0])
+        if int(values[0][7]) == 0:
+            acq_channels = int(values[0][-5:],2)
+        else:
+            acq_channels = int(values[0][-8:],2)
 
         #determining length of adc data in file which is dependent on whether file is packed or not
         #values[5] stores total number of bytes for adc storage
@@ -187,9 +190,40 @@ class TranslatedFile:
         for i, item in enumerate(self.trailer[1]):
             print("Channel No. " + str(i) + " annotation: " + str(item))
 
+    #print total length of header in bytes (stored in header[4])
+    def printHeaderLength(self):
+        print(self.header[4])
+
+    #print total length of ADC data in bytes (stored in header[5])
+    def printADCDataLength(self):
+        print(self.header[5])
+
+    #print time and date of start of data acquesition in GMT (stored in header[13]) 
+    def printAcqTime(self):
+        print(time.strftime("%d %b %Y , %H:%M:%S", time.gmtime(self.header[13])))
+
+    #print number of acquired channels (stored in last 5 (or 8) bits in header[0])
+    def printAcqChannels(self):
+        if int(self.header[0][7]) == 0:
+            print(int(self.header[0][-5:],2))
+        else:
+            print(int(self.header[0][-8:],2))  
+
+    #print channel information for either one channel or a list of channel numbers, default is all channels
+    def printChannelInfo(self, number = None):
+        if number == None:
+            number = list(range(0, int((self.header[4] - self.header[2] - 2) / self.header[3])))
+        if type(number) == list:
+            for item in number:
+                print(self.header[33 + item])
+        elif type(number) == int:
+            print(self.header[33 + number])
+
 
 location = "Desktop/BinaryReader/Files/20190923-T1.wdq"
 trans_file = BinaryReader.readFromFile(location)
 trans_file.printHeader()
 trans_file.saveADCToFile("Desktop/BinaryReader/Files/output1.csv")
 trans_file.printTrailer()
+trans_file.printChannelInfo([1, 2])
+trans_file.printAcqTime()
