@@ -15,14 +15,14 @@ class BinaryReader:
     def readFromFile(location):
         bin_data = open(location, "rb")
         #format strings for first 33 elements of header
-        formats = ["H", "H", "b", "b", "h", "L", "L", "h", "H", "H", "h", "4b", "d",
-        "l", "l", "l", "l", "l", "l", "h", "h", "b", "b", "b", "b", "32b", "H", "H", "b", "b", "h", "b", "b"]
+        formats = ["<H", "<H", "<b", "<b", "<h", "<L", "<L", "<h", "<H", "<H", "<h", "<4b", "<d",
+        "<l", "<l", "<l", "<l", "<l", "<l", "<h", "<h", "<b", "<b", "<b", "<b", "<32b", "<H", "<H", "<b", "<b", "<h", "<b", "<b"]
         #list that stores whether an element should be presented in binary or decimal (True = binary)
         bin_bool = [True, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False,
         False, False, False, False, False, True, True, False, True, False, True, True, True, True, True, True, True]
         values = []
         #format strings for the elements in the channel information
-        channel_format = ["f", "f", "d", "d", "6b", "b", "b", "b", "b", "H"]
+        channel_format = ["<f", "<f", "<d", "<d", "<6b", "<b", "<b", "<b", "<b", "<H"]
         #list that stores whether an element in the channel information should be presented in binary or decimal (True = binary)
         bin_bool_channel = [False, False, False, False, False, False, False, True, True, True]
         
@@ -54,7 +54,7 @@ class BinaryReader:
             values.append(channel_values)
 
         #reading and converting last header element
-        values.append(struct.unpack("h", bin_data.read(struct.calcsize("h")))[0])
+        values.append(struct.unpack("<h", bin_data.read(struct.calcsize("<h")))[0])
 
         
         #creating the adc data from the main body of the binary file
@@ -62,7 +62,7 @@ class BinaryReader:
         adc_data = []
         for i in range(int(values[5]/4)):
             #reading 4 bytes per data point as unsigned long, then converting it into binary string
-            adc_data_bin = "{0:032b}".format(struct.unpack("L", bin_data.read(4))[0])
+            adc_data_bin = "{0:032b}".format(struct.unpack("<L", bin_data.read(4))[0])
             adc_data_item = []
 
             #determining the sign of each of the two elements in the long variable by looking for the for bit 0 and 16
@@ -106,7 +106,7 @@ class TranslatedFile:
                 print(BinaryReader.field_names[i] + ": " + str(self.header[i]))
             else:
                 print("Channel No. " + str(i - len(BinaryReader.field_names)) + " information: " + str(self.header[i]))
-        print("Fixed value of 8001H: " + str(self.header[-1]))#
+        print("Fixed value of 8001H: " + str(self.header[-1]))
 
     #saves the adc data to a file with name 'name'
     def saveADCToFile(self, name, delim = ",", fmt = "%s"):
