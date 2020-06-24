@@ -11,10 +11,11 @@ class BinaryReader:
         "time marker position (file)", "Left limit cursor", "Right limit cursor", "Byte 64", "Byte 65", "Byte 66", "Byte 67", "Byte 68 - 99", "Byte 100 - 101",
         "Byte 102 - 103", "Byte 104", "Byte 105", "Byte 106 - 107", "Byte 108", "Byte 109"]
 
+    #takes one string argument for file location, returns TranslatedFile object
     @staticmethod
     def readFromFile(location):
         bin_data = open(location, "rb")
-        #format strings for first 33 elements of header
+        #format strings for first 33 elements of header, all formats are standart size little endian
         formats = ["<H", "<H", "<b", "<b", "<h", "<L", "<L", "<h", "<H", "<H", "<h", "<4b", "<d",
         "<l", "<l", "<l", "<l", "<l", "<l", "<h", "<h", "<b", "<b", "<b", "<b", "<32b", "<H", "<H", "<b", "<b", "<h", "<b", "<b"]
         #list that stores whether an element should be presented in binary or decimal (True = binary)
@@ -56,32 +57,48 @@ class BinaryReader:
         #reading and converting last header element
         values.append(struct.unpack("<h", bin_data.read(struct.calcsize("<h")))[0])
 
-        
-        #creating the adc data from the main body of the binary file
+        #checking if the file is packed (stored in values[26][1])
+        packed = False
+        if int(values[26][1]) == 1:
+            packed = True
+
+        #number of acquired channels (stored in the last 5 bits of values[0])
+        acq_channels = int(values[0][-5:], 2)
+
+        #determining length of adc data in file which is dependent on whether file is packed or not
         #values[5] stores total number of bytes for adc storage
+        #values[33] corresponds to first channel information, values[33][6] gives sample rate divider
+        if packed:
+            sample_sum = 0
+            #calculate samples per channel and then sum them up over all channels
+            for i in range(acq_channels):
+                sample_sum = int(sample_sum + ((values[5] / acq_channels) - 1) / values[33 + i][6]) + 1
+            adc_data_lim = int(2 * sample_sum) 
+        else:
+            adc_data_lim = int(values[5])
+
+        #creating the adc data from the main body of the binary file
         adc_data = []
-        for i in range(int(values[5]/4)):
-            #reading 4 bytes per data point as unsigned long, then converting it into binary string
-            adc_data_bin = "{0:032b}".format(struct.unpack("<L", bin_data.read(4))[0])
+        for i in range(int(adc_data_lim / (2 * acq_channels))):
+            #reading 2 bytes per data point per channel as unsigned short, then converting it into binary string
             adc_data_item = []
-
-            #determining the sign of each of the two elements in the long variable by looking for the for bit 0 and 16
-            #then corectly converting the relevant bits back to decimal and adding them to item list
-            if int(adc_data_bin[0]) == 0:
-                adc_data_item.append(int(adc_data_bin[1:14], 2) * values[33][2])
-            else:
-                #converting negative two's complement binary to decimal
-                adc_data_item.append((int(adc_data_bin[1:14], 2) - (1 << len(adc_data_bin[1:14]))) * values[33][2])
-            if int(adc_data_bin[16]) == 0:
-                adc_data_item.append(int(adc_data_bin[17:30], 2) * values[33][2])
-            else:
-                #converting negative two's complement binary to decimal
-                adc_data_item.append((int(adc_data_bin[17:30], 2) - (1 << len(adc_data_bin[17:30]))) * values[33][2])
-
+            for k in range(acq_channels):
+                adc_data_bin = "{0:016b}".format(struct.unpack("<H", bin_data.read(2))[0])  
+                #determining the sign of the binary number by looking for the for bit 0
+                #then corectly converting the relevant bits back to decimal and adding them to item list
+                #values[33] corresponds to first channel information, values[33][2] calibration scaling factor
+                if int(adc_data_bin[0]) == 0:
+                    adc_data_bin = int(adc_data_bin[1:14], 2) * values[33 + k][2]
+                else:
+                    #converting negative two's complement binary to decimal
+                    adc_data_bin = (int(adc_data_bin[1:14], 2) - (1 << len(adc_data_bin[1:14]))) * values[33 + k][2]
+                adc_data_item.append(adc_data_bin)
+            #appending date and time to the item list, values[13] stores time of start of measurement,
+            #values[12] stores time between measurements
+            adc_data_item.append(time.strftime("%d %b %Y", time.gmtime(values[13] + i * values[12])))
+            adc_data_item.append(time.strftime("%H:%M:%S", time.gmtime(values[13] + i * values[12])))
             #appending all values to adc_data list which will be stored
-            adc_data.append([adc_data_item[0], adc_data_item[1], 
-            time.strftime("%d %b %Y", time.gmtime(values[13] + i * values[12])),
-            time.strftime("%H:%M:%S", time.gmtime(values[13] + i * values[12]))])
+            adc_data.append(adc_data_item)
 
         trailer = []
         #returns a TranslatedFile object with the translated three main parts of the file as attributes
