@@ -100,7 +100,56 @@ class BinaryReader:
             #appending all values to adc_data list which will be stored
             adc_data.append(adc_data_item)
 
+        #translating the trailer of the file
         trailer = []
+        trailer_pointers = []
+        trailer_item = []
+        marker = True
+        time_stamp = False
+        #translating first part of trailer containing event marker pointers
+        #values[6] stores total number of bytes in trailer part 1, each entry is a 4 byte long
+        for i in range(int(values[6] / 4)):
+            if marker:
+                trailer_item = [struct.unpack("<l", bin_data.read(4))[0]]
+                marker = False
+                #determine whether or not nect long will be time and date stamp or not
+                if trailer_item[-1] >= 0:
+                    time_stamp = True
+            elif time_stamp:
+                trailer_item.append(struct.unpack("<l", bin_data.read(4))[0])
+                time_stamp = False
+            else:
+                #determine whether next long is comment pointer or new marker pointer
+                trailer_long = struct.unpack("<l", bin_data.read(4))[0]
+                if trailer_long > -1 * values[5] / (2 * acq_channels):
+                    trailer_pointers.append(trailer_item)
+                    trailer_item = [trailer_long]
+                    if trailer_item[-1] >= 0:
+                        time_stamp = True
+                else:
+                    trailer_item.append(trailer_long)
+                    trailer_pointers.append(trailer_item)
+                    marker = True
+        if len(trailer_pointers) == 0:
+            trailer_pointers.append(trailer_item)
+        elif trailer_pointers[-1] != trailer_item:
+            trailer_pointers.append(trailer_item)
+        trailer.append(trailer_pointers)
+        
+        #translating second part of trailer containing user annotations
+        #values[7] stores number of user annotations
+        trailer_annotations = []
+        trailer_item = ""
+        for i in range(values[7]):
+            
+            trailer_byte = struct.unpack("<b", bin_data.read(1))[0]
+            if int(trailer_byte) == 0:
+                trailer_annotations.append(trailer_item)
+                trailer_item = ""
+            else:
+                trailer_item = trailer_item + chr(int(trailer_byte))
+        trailer.append(trailer_annotations)
+
         #returns a TranslatedFile object with the translated three main parts of the file as attributes
         return(TranslatedFile(values, adc_data, trailer))
 
@@ -129,7 +178,18 @@ class TranslatedFile:
     def saveADCToFile(self, name, delim = ",", fmt = "%s"):
         np.savetxt(name, self.adc_data, delimiter = delim, fmt=fmt)
 
+    #printing the trailer element of the file
+    def printTrailer(self):
+        print("Event marker pointers: ")
+        for item in self.trailer[0]:
+            print(item)
+        print("User annotations")
+        for i, item in enumerate(self.trailer[1]):
+            print("Channel No. " + str(i) + " annotation: " + str(item))
+
+
 location = "Desktop/BinaryReader/Files/20190923-T1.wdq"
 trans_file = BinaryReader.readFromFile(location)
 trans_file.printHeader()
 trans_file.saveADCToFile("Desktop/BinaryReader/Files/output1.csv")
+trans_file.printTrailer()
