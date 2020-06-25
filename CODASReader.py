@@ -3,7 +3,9 @@ import time
 import numpy as np
 
 
-class BinaryReader:
+class CODASReader:
+    """Reads CODAS files and converts them into ASCII. \n
+    Information on the file format can be found at https://www.dataq.com/resources/techinfo/ff.htm."""
 
     field_names = ["S/R denom", "Intelligent Oversampling Factor", "Byte 4", "Byte 5", "Bytes in data file header", "Byte 8 - 11", 
         "Byte 12 - 15", "User annotation Bytes", "Height of graphics area", "Width of graphics area", "Cursor position (screen)", "Byte 24 - 27",
@@ -14,7 +16,13 @@ class BinaryReader:
     #takes one string argument for file location, returns TranslatedFile object
     @staticmethod
     def readFromFile(location):
+        """param location : str \n
+        Reads CODAS file from file location 'location' and converts it to ASCII. \n
+        returns TranslatedFile type."""
         bin_data = open(location, "rb")
+        bin_data.seek(0, 2)
+        bytes_in_file = bin_data.tell()
+        bin_data.seek(0, 0)
         #format strings for first 33 elements of header, all formats are standart size little endian
         formats = ["<H", "<H", "<b", "<b", "<h", "<L", "<L", "<h", "<H", "<H", "<h", "<4b", "<d",
         "<l", "<l", "<l", "<l", "<l", "<l", "<h", "<h", "<b", "<b", "<b", "<b", "<32b", "<H", "<H", "<b", "<b", "<h", "<b", "<b"]
@@ -143,6 +151,7 @@ class BinaryReader:
                     trailer_item.append(trailer_long)
                     trailer_pointers.append(trailer_item)
                     marker = True
+        #add last item to list if has not been added which happens if the last item has no comment pointer
         if len(trailer_pointers) == 0:
             trailer_pointers.append(trailer_item)
         elif trailer_pointers[-1] != trailer_item:
@@ -166,15 +175,17 @@ class BinaryReader:
         #translating all remaining bytes as event marker comment part of the trailer, code works similiarly to user annotation above
         trailer_item = ""
         trailer_comments_list = []
-        trailer_comments = bin_data.read()
-        for i in range(len(trailer_comments)):
-            trailer_byte = struct.unpack("<b", trailer_comments[i])[0]
+        #trailer_comments = bin_data.read()
+        for i in range(bytes_in_file - (values[4] + adc_data_lim + values[6] + values[7])):
+            trailer_byte = struct.unpack("<b", bin_data.read(1))[0]
             if int(trailer_byte) == 0:
                 trailer_comments_list.append(trailer_item)
                 trailer_item = ""
             else:
                 trailer_item = trailer_item + chr(int(trailer_byte))
         trailer.append(trailer_comments_list)
+        
+        bin_data.close()
 
         #returns a TranslatedFile object with the translated three main parts of the file as attributes
         return(TranslatedFile(values, adc_data, trailer))
@@ -194,15 +205,22 @@ class TranslatedFile:
     #printing list with header values
     def printHeader(self):
         for i in range(len(self.header) - 1):
-            if i < len(BinaryReader.field_names):
-                print(BinaryReader.field_names[i] + ": " + str(self.header[i]))
+            if i < len(CODASReader.field_names):
+                print(CODASReader.field_names[i] + ": " + str(self.header[i]))
             else:
-                print("Channel No. " + str(i - len(BinaryReader.field_names)) + " information: " + str(self.header[i]))
+                print("Channel No. " + str(i - len(CODASReader.field_names)) + " information: " + str(self.header[i]))
         print("Fixed value of 8001H: " + str(self.header[-1]))
 
     #saves the adc data to a file with name 'name'
-    def saveADCToFile(self, name, delim = ",", fmt = "%s"):
-        np.savetxt(name, self.adc_data, delimiter = delim, fmt=fmt)
+    def saveADCsToCSV(self, name, delim = ",", fmt = "%s"):
+        #np.savetxt(name, self.adc_data, delimiter = delim, fmt=fmt)
+        with open(name, "w", newline="\n") as file:
+            for item in self.adc_data:
+                for seg in item:
+                    file.write(str(seg))
+                    file.write(delim)
+                file.write("\n")
+                
 
     #printing the trailer element of the file
     def printTrailer(self):
@@ -237,6 +255,9 @@ class TranslatedFile:
 
     #print channel information for either one channel or a list of channel numbers, default is all channels
     def printChannelInfo(self, number = None):
+        """param number : int or list of int \n
+        Prints the channel information stored in the header for the channel(s) given. \n
+        The default is to print all channels"""
         if number == None:
             number = list(range(0, int((self.header[4] - self.header[2] - 2) / self.header[3])))
         if type(number) == list:
@@ -246,10 +267,11 @@ class TranslatedFile:
             print(self.header[33 + number])
 
 
-location = "Desktop/BinaryReader/Files/20190923-T1.wdq"
-trans_file = BinaryReader.readFromFile(location)
+location = "Desktop/BinaryReader/Files/Imprinetta-20180222-T1.wdq"
+trans_file = CODASReader.readFromFile(location)
 trans_file.printHeader()
-trans_file.saveADCToFile("Desktop/BinaryReader/Files/output1.csv")
+trans_file.saveADCsToCSV("Desktop/BinaryReader/Files/output1.csv")
 trans_file.printTrailer()
 trans_file.printChannelInfo([1, 2])
 trans_file.printAcqTime()
+trans_file.printChannelInfo()
