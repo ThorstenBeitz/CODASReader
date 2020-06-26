@@ -7,11 +7,17 @@ class CODASReader:
     """Object to read, translate, store and write content from
     CODAS files. \n
     Information on the file format can be found at \n
-    https://www.dataq.com/resources/techinfo/ff.htm"""
+    https://www.dataq.com/resources/techinfo/ff.htm \n
+    The file header is read automatically by default upon creation
+    of this object. \n
+    It is recommended not to change this as the header must be read
+    before any other part of the file can be processed."""
 
     bytes_in_file = 0
     header = []
     adc_data = []
+    adc_time_stamps = []
+    adc_scaling = []
     trailer = []
     packed = False
     hiRes = False
@@ -27,7 +33,15 @@ class CODASReader:
         if read_header:
             self.readHeader()
 
+    # reads header of the file. This is done automatically when creating
+    # a new CODASReader object by default.
+    # must be run before reading the rest of the file.
     def readHeader(self):
+        """Reads the header of the file. \n
+        This is done automatically by default when creating a new 
+        CODASReader object. \n
+        The header must be read before any other part of the file can
+        be read."""
         bin_data = open(location, "rb")
         bin_data.seek(0, 0)
 
@@ -91,7 +105,7 @@ class CODASReader:
 
         # reading and converting last header element
         self.header.append(struct.unpack(
-            "<h", bin_data.read(struct.calcsize("<h")))[0])
+            "<H", bin_data.read(struct.calcsize("<H")))[0])
         # checking if the file is packed (stored in self.header[26][1])
         if int(self.header[26][1]) == 1:
             self.packed = True
@@ -127,53 +141,143 @@ class CODASReader:
 
         bin_data.close
 
-    def readADC(self):
-        bin_data = open(location, "rb")
-        bin_data.seek(self.header[4], 0)
+    # reads ADC data from file.
+    # takes a list of channel or a single channel number as optional
+    # argument so it only reads the data for those channels.
+    # takes start time and end time (in s since start) as optional
+    # arguments to only read data within a certain time frame,
+    # the default is to read from start of data acquesition to finish.
+    # save_memory determines whether the scaling factor will be applied
+    # to all values and saved or whether it is simply stored once to
+    # then manually be applied later
+    def readADC(self, channels=None, start_time=0, end_time=None,
+                save_memory=True):
+        """PARAMETERS: \n
+        channels : int or array-like of int, optional \n
+            Must be able to be converted into a numpy array. \n
+            A list of all channels from which data should be read. \n
+            Default is reading all acquired channels. \n
+            Use 'printAcqChannels' to see number the number of 
+            acquired channels. \n
+        start_time : float, optional \n
+            Time in seconds since start of data acquesition at which
+            the first ADC data should be read. \n
+            Default is 0 \n
+        end_time : float, optional \n
+            Time in seconds since start of data acquesition at which
+            the last ADC data should be read. \n
+            Default is until end of ADC data section in file. \n
+        save_memory : bool \n
+            Decides whether the scaling factor is applied to the data
+            before it is saved to the array \n
+            or if the scaling factor is saved in a separate array \n
+            Default is True \n
+            It is recommended to use save_memory = True for large files
+            and / or for systems with limited ram. \n
+        \n Use 'printAcqTime' and 'printFinishTime' to get start and
+        finish time of the data acquesition respectively
+        \n The header of the file must be read before
+        reading the ADC data.
+        \n This method reads the ADC data from the file and saves the
+        translated data to the adc_data array in this object. """
+        # converting channels argument into numpy array to loop over
+        if channels == None:
+            channels = np.arange(self.acq_channels)
+        elif type(channels) == int:
+            channels = np.array([channels])
+        else:
+            channels = np.array(channels)
+        # determining how many bits are used to store the data,
+        # which depends on whether the file is hiRes or not
         if self.hiRes:
             adc_bit_length = 16
         else:
             adc_bit_length = 14
+        # opening file
+        bin_data = open(location, "rb")
+        # determining start byte based on the start time given
+        # self.header[12] stores time bewteen samples,
+        # self.header[4] stores number of bytes in header
+        # each channel takes up 2 bytes per datapoint in adc data
+        start_byte = int((start_time / self.header[12]) * self.acq_channels * 2
+                         + self.header[4])
+        bin_data.seek(start_byte, 0)
+        # determining end byte relative to the start byte based on
+        # end time given, if none is given all adc data from start
+        # byte to the end of the adc data section is read
+        if end_time == None:
+            end_byte = self.adc_data_bytes + self.header[4] - start_byte
+        else:
+            end_byte = int(((end_time - start_time) / self.header[12])
+                           * self.acq_channels * 2)
 
+        # setting up adc data array based on whether save_memory is
+        # set to true or not
+        if save_memory:
+            self.adc_data = np.empty([int(end_byte / (2 * self.acq_channels)),
+                                      len(channels)], dtype=np.int16)
+        else:
+            self.adc_data = np.empty([int(end_byte / (2 * self.acq_channels)),
+                                      len(channels)])
+        # setting up arrays to store the time stamps and the scaling
+        # factor for each channel.
+        # these are stored separately to increase memory efficiency on
+        # the main data
+        self.adc_time_stamps = np.empty([int(end_byte / (2 * self.acq_channels)),
+                                         3], dtype="U20")
+        self.adc_scaling = np.empty(len(channels))
         # creating the adc data from the main body of the binary file
-        self.adc_data = []
-        for i in range(int(self.adc_data_bytes / (2 * self.acq_channels))):
+        for i in range(int(end_byte / (2 * self.acq_channels))):
             # reading 2 bytes per data point per channel
             # as unsigned short, then converting it into binary string
-            adc_data_item = []
-            for k in range(self.acq_channels):
+            for k, channel in enumerate(channels):
+                # finding byte in adc data section where the current
+                # channel's information for the current time is stored
+                bin_data.seek(start_byte + 2 * i * self.acq_channels + 2
+                              * channel, 0)
                 adc_data_bin = "{0:016b}".format(
                     struct.unpack("<H", bin_data.read(2))[0])
                 # determining the sign of the binary number
                 # by looking for bit 0,
                 # then corectly converting the relevant bits back
                 # to decimal and adding them to item list
-                # self.header[33] corresponds to first channel info,
-                # self.header[33][2] calibration scaling factor
                 if int(adc_data_bin[0]) == 0:
-                    adc_data_bin = (int(adc_data_bin[1:adc_bit_length], 2)
-                                    * self.header[33 + k][2])
+                    adc_data_bin = (int(adc_data_bin[1:adc_bit_length], 2))
                 else:
                     # converting negative two's complement binary
                     # to decimal
                     adc_data_bin = ((int(adc_data_bin[1:adc_bit_length], 2)
                                      - (1 << len(adc_data_bin[1:adc_bit_length]
-                                                 ))) * self.header[33 + k][2])
-                adc_data_item.append(adc_data_bin)
+                                                 ))))
+                # scaling factor is only applied if save_memory is set
+                # to false
+                if not save_memory:
+                    adc_data_bin = adc_data_bin * self.header[33 + channel][2]
+                self.adc_data[i, k] = adc_data_bin
             # appending date and time to the item list,
             # self.header[13] stores time of start of measurement,
             # self.header[12] stores time between measurements
-            adc_data_item.append(time.strftime(
-                "%d %b %Y", time.gmtime(self.header[13] + i * self.header[12])))
-            adc_data_item.append(time.strftime(
-                "%H:%M:%S", time.gmtime(self.header[13] + i * self.header[12])))
-            # appending all values to adc_data list which will be stored
-            self.adc_data.append(adc_data_item)
+            self.adc_time_stamps[i, 0] = (time.strftime(
+                "%d/%m/%Y", time.gmtime(self.header[13] + start_time + i
+                                        * self.header[12])))
+            self.adc_time_stamps[i, 1] = (time.strftime(
+                "%H:%M:%S", time.gmtime(self.header[13] + start_time + i
+                                        * self.header[12])))
+            self.adc_time_stamps[i, 2] = (i * self.header[12])
+        # if save_memory is set to true, scaling factors will be saved
+        # in a separate list
+        if save_memory:
+            for i, channel in enumerate(channels):
+                self.adc_scaling[i] = (self.header[33 + channel][2])
 
         bin_data.close()
 
+    # reads trailer of the file
+    # header must be read first
     def readTrailer(self):
-
+        """Reads the trailer of the file. \n
+        The header of the file must be read before
+        reading the trailer."""
         bin_data = open(location, "rb")
         bin_data.seek(self.header[4] + self.adc_data_bytes, 0)
         # translating the trailer of the file
@@ -262,7 +366,7 @@ class CODASReader:
     # printing list with header values
     def printHeader(self):
         """Prints header of the file"""
-
+        # names of the different header elements
         field_names = ["S/R denom", "Intelligent Oversampling Factor",
                        "Byte 4", "Byte 5", "Bytes in data file header",
                        "Byte 8 - 11", "Byte 12 - 15", "User annotation Bytes",
@@ -278,25 +382,51 @@ class CODASReader:
                        "Byte 106 - 107", "Byte 108", "Byte 109"]
 
         for i in range(len(self.header) - 1):
+            # printing first 33 elements fo the header
             if i < len(field_names):
                 print(field_names[i] + ": " + str(self.header[i]))
             else:
+                # printing channel information
                 print("Channel No. " + str(i - len(field_names))
                       + " information: "
                       + str(self.header[i]))
+        # printing control byte at the end of header
         print("Fixed value of 8001H: " + str(self.header[-1]))
 
     # saves the adc data to a file with name 'name'
-    def saveADCsToCSV(self, name, delim=",", fmt="%s"):
+    def saveADCsToCSV(self, name, delim=",", fmt="%s", header=[]):
         """param name : str \n
         param delim : str, optional \n
         param fmt : str, optional \n
-        Saves the ADC data of the file to a CSV file of name 'name'."""
+        param header : list, optional \n
+        Saves the ADC data of the file to a CSV file of name 'name'. \n
+        First line of the file will be the header if any is given,
+        otherwise it will be empty. \n
+        The second line will be the scaling factor for each channel
+        in the column of the respective channel data."""
         # np.savetxt(name, self.adc_data, delimiter = delim, fmt=fmt)
+        # writing the adc data to a csv file item by item to save
+        # memory
         with open(name, "w", newline="\n") as file:
-            for item in self.adc_data:
+            # writing header at the top of the file if a header is given
+            for item in header:
+                file.write(str(item))
+                file.write(delim)
+            file.write("\n")
+            # writing the scaling factors at the top of the file
+            # scaling information for each channel will be first item
+            # in the column corresponding to that channel
+            for item in self.adc_scaling:
+                file.write(str(item))
+                file.write(delim)
+            file.write("\n")
+            # writing adc data and time stamps
+            for i, item in enumerate(self.adc_data):
                 for seg in item:
                     file.write(str(seg))
+                    file.write(delim)
+                for seg in self.adc_time_stamps[i]:
+                    file.write(seg)
                     file.write(delim)
                 file.write("\n")
 
@@ -330,6 +460,21 @@ class CODASReader:
         print(time.strftime("%d %b %Y , %H:%M:%S",
                             time.gmtime(self.header[13])))
 
+    # print time and date at which the data acquesition was finished
+    # (stored in header[14])
+    def printFinishTime(self):
+        """"Prints time and date of end of data acquesition"""
+        print(print(time.strftime("%d %b %Y , %H:%M:%S",
+                                  time.gmtime(self.header[14]))))
+
+    # print total time in seconds over which the data acquesition took
+    # place (1s accuracy)
+    def printMeasurementTimeFrame(self):
+        """Prints total time in seconds over which the data acquesition
+        took place. \n
+        The accuracy of this is limited to 1s."""
+        print(self.header[14] - self.header[13])
+
     # print number of acquired channels
     # (stored in last 5 (or 8) bits in header[0])
     def printAcqChannels(self):
@@ -341,7 +486,7 @@ class CODASReader:
     def printChannelInfo(self, number=None):
         """param number : int or list of int \n
         Prints the channel information stored in the header
-        for the channel(s) given. \n
+        for the channel(s) given in 'number'. \n
         The default is to print all channels"""
         if number == None:
             number = list(
@@ -353,13 +498,18 @@ class CODASReader:
         elif type(number) == int:
             print(self.header[33 + number])
 
+    # print time between samples
+    def printTimeBetweenSamples(self):
+        """Prints the time between two ADC data samples"""
+        print(self.header[12])
 
-location = "Desktop/BinaryReader/Files/20190923-T1.wdq"
+
+location = "Desktop/BinaryReader/Files/Imprinetta-20180222-T1.wdq"
 
 codas_reader = CODASReader(location)
-codas_reader.readADC()
+codas_reader.readADC(channels=[0, 1, 2, 3, 15], start_time=1, end_time=5)
 codas_reader.readTrailer()
-codas_reader.saveADCsToCSV("Desktop/BinaryReader/Files/output1.csv")
+codas_reader.saveADCsToCSV("Desktop/BinaryReader/Files/output_test.csv")
 codas_reader.printHeader()
 codas_reader.printTrailer()
 codas_reader.printAcqChannels()
