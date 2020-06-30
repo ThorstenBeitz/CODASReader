@@ -2,6 +2,7 @@ import struct
 import time
 import numpy as np
 import sys
+import traceback
 
 
 class CODASReader:
@@ -26,12 +27,8 @@ class CODASReader:
     adc_data_bytes = 0
 
     def __init__(self, location, read_header=True):
-        try:
-            bin_data = open(location, "rb")
-        except Exception as e:
-            print(e)
-            sys.stderr.write("File not found or could not be opened")
-            sys.exit(1)
+        bin_data = open(location, "rb")
+        # determining total length of file in bytes
         bin_data.seek(0, 2)
         self.bytes_in_file = bin_data.tell()
         bin_data.seek(0, 0)
@@ -113,13 +110,12 @@ class CODASReader:
         self.header.append(struct.unpack(
             "<H", bin_data.read(struct.calcsize("<H")))[0])
         # if control byte of header does not match the expected value
-        # print an error and the recorded control byte
-        # exit with exit code 1
+        # raise an error and the recorded control byte
         if self.header[-1] != 32769:
-            sys.stderr.write("Header control byte"
-                             + "does not match expected valueof 32769: "
-                             + str(self.header[-1]) + "\n")
-            sys.exit(1)
+            raise(ValueError("File may be truncated or corrupted: "
+                             + "Header control byte "
+                             + "does not match expected value of 32769: "
+                             + str(self.header[-1]) + "\n"))
         # checking if the file is packed (stored in self.header[26][1])
         if int(self.header[26][1]) == 1:
             self.packed = True
@@ -170,6 +166,7 @@ class CODASReader:
         channels : int or array-like of int, optional \n
             Must be able to be converted into a numpy array. \n
             A list of all channels from which data should be read. \n
+            The first channel has index 0. \n
             Default is reading all acquired channels. \n
             Use 'printAcqChannels' to see number the number of 
             acquired channels. \n
@@ -194,6 +191,10 @@ class CODASReader:
         reading the ADC data.
         \n This method reads the ADC data from the file and saves the
         translated data to the adc_data array in this object. """
+        # raise error if header list is empty
+        if len(self.header) == 0:
+            raise RuntimeError("Header has not been read or is empty"
+                               + "Use 'readHeader' to read header")
         # converting channels argument into numpy array to loop over
         if channels == None:
             channels = np.arange(self.acq_channels)
@@ -245,6 +246,12 @@ class CODASReader:
             # reading 2 bytes per data point per channel
             # as unsigned short, then converting it into binary string
             for k, channel in enumerate(channels):
+                if channel >= self.acq_channels:
+                    raise IndexError("One or more of the provided channel "
+                                     + "numbers "
+                                     + "are outside the range of channels "
+                                     + "with recorded data: \n"
+                                     + str(channel))
                 # finding byte in adc data section where the current
                 # channel's information for the current time is stored
                 bin_data.seek(start_byte + 2 * i * self.acq_channels + 2
@@ -292,6 +299,10 @@ class CODASReader:
         """Reads the trailer of the file. \n
         The header of the file must be read before
         reading the trailer."""
+        # raise error if header list is empty
+        if len(self.header) == 0:
+            raise RuntimeError("Header has not been read or is empty"
+                               + "Use 'readHeader' to read header")
         bin_data = open(location, "rb")
         bin_data.seek(self.header[4] + self.adc_data_bytes, 0)
         # translating the trailer of the file
@@ -459,53 +470,42 @@ class CODASReader:
 
     # print total length of header in bytes (stored in header[4])
     def printHeaderLength(self):
-        """Prints and returns total length of header
-        in the file in bytes"""
+        """Prints total length of header in the file in bytes"""
         print(self.header[4])
-        return self.header[4]
 
     # print total length of ADC data in bytes (stored in header[5])
     def printADCDataLength(self):
-        """Prints and returns total length of ADC data in
-        the file in bytes"""
+        """Prints total length of ADC data in the file in bytes"""
         print(self.header[5])
-        return self.header[5]
 
     # print time and date of start of data acquesition in GMT
     # (stored in header[13])
     def printAcqTime(self):
-        """Prints and returns time and date of start of
+        """Prints time and date of start of
         data acquesition"""
         print(time.strftime("%d %b %Y , %H:%M:%S",
                             time.gmtime(self.header[13])))
-        return time.strftime("%d %b %Y , %H:%M:%S",
-                             time.gmtime(self.header[13]))
 
     # print time and date at which the data acquesition was finished
     # (stored in header[14])
     def printFinishTime(self):
-        """"Prints and returns time and date of end of
-        data acquesition"""
+        """"Prints time and date of end of data acquesition"""
         print(time.strftime("%d %b %Y , %H:%M:%S",
                             time.gmtime(self.header[14])))
-        return time.strftime("%d %b %Y , %H:%M:%S",
-                             time.gmtime(self.header[14]))
 
     # print total time in seconds over which the data acquesition took
     # place (1s accuracy)
     def printMeasurementTimeFrame(self):
-        """Printsand returns total time in seconds over which the
+        """Prints total time in seconds over which the
         data acquesition took place. \n
         The accuracy of this is limited to 1s."""
         print(self.header[14] - self.header[13])
-        return self.header[14] - self.header[13]
 
     # print number of acquired channels
     # (stored in last 5 (or 8) bits in header[0])
     def printAcqChannels(self):
-        """Prints and returns number of acquired channels"""
+        """Prints number of acquired channels"""
         print(self.acq_channels)
-        return self.acq_channels
 
     # print channel information for either one channel
     # or a list of channel numbers, default is all channels
@@ -526,27 +526,83 @@ class CODASReader:
 
     # print time between samples
     def printTimeBetweenSamples(self):
-        """Prints and returns the time between two ADC data samples"""
+        """Prints the time between two ADC data samples"""
         print(self.header[12])
-        return self.header[12]
 
     # prints the sample rate by multiplying the samples per channel
     # per second times the total number of channels
     def printSampleRate(self):
-        """Prints and returns total sample rate (samples / s)"""
+        """Prints total sample rate (samples / s)"""
         print(1 / self.header[12] * self.acq_channels)
+
+    # return total length of header in bytes (stored in header[4])
+    def getHeaderLength(self):
+        """Returns total length of header in the file in bytes"""
+        return self.header[4]
+
+    # return total length of ADC data in bytes (stored in header[5])
+    def getADCDataLength(self):
+        """Returns total length of ADC data in the file in bytes"""
+        return self.header[5]
+
+    # return time and date of start of data acquesition in GMT
+    # (stored in header[13])
+    def getAcqTime(self):
+        """Returns time and date of start of data acquesition"""
+        return time.strftime("%d %b %Y , %H:%M:%S",
+                             time.gmtime(self.header[13]))
+
+    # return time and date at which the data acquesition was finished
+    # (stored in header[14])
+    def getFinishTime(self):
+        """"Returns time and date of end of data acquesition"""
+        return time.strftime("%d %b %Y , %H:%M:%S",
+                             time.gmtime(self.header[14]))
+
+    # return total time in seconds over which the data acquesition took
+    # place (1s accuracy)
+    def getMeasurementTimeFrame(self):
+        """Returns total time in seconds over which the
+        data acquesition took place. \n
+        The accuracy of this is limited to 1s."""
+        return self.header[14] - self.header[13]
+
+    # return number of acquired channels
+    # (stored in last 5 (or 8) bits in header[0])
+    def getAcqChannels(self):
+        """Returns number of acquired channels"""
+        return self.acq_channels
+
+    # return time between samples
+    def getTimeBetweenSamples(self):
+        """Returns the time between two ADC data samples"""
+        return self.header[12]
+
+    # return the sample rate by multiplying the samples per channel
+    # per second times the total number of channels
+    def getSampleRate(self):
+        """Returns total sample rate (samples / s)"""
         return 1 / self.header[12] * self.acq_channels
 
 
+# only runs if program is run directly from file
 if __name__ == "__main__":
-    location = "Desktop/BinaryReader/Files/Imprinetta-20180222-T1.wdq"
-    codas_reader = CODASReader(location)
-    codas_reader.readADC(channels=[0, 1, 2, 3, 15], start_time=1, end_time=5)
-    codas_reader.readTrailer()
-    codas_reader.saveADCsToCSV("Desktop/BinaryReader/Files/output_test.csv"
-                                , header=["Samples per second = "
-                                + str(codas_reader.printSampleRate())])
-    codas_reader.printHeader()
-    codas_reader.printTrailer()
-    codas_reader.printAcqChannels()
+    try:
+        # add code here for operating program from this file
+        location = "Desktop/BinaryReader/Files/Imprinetta-20180222-T1.wdq"
+        codas_reader = CODASReader(location)
+        channels = [0, 1, 2, 3, 15]
+        codas_reader.readADC(channels=channels, start_time=1,
+                             end_time=5)
+        codas_reader.readTrailer()
+        codas_reader.saveADCsToCSV(
+            "Desktop/BinaryReader/Files/output_test.csv",
+            header=["Samples per second = "
+                    + str(codas_reader.getSampleRate()),
+                    "Channels recorded = 0; 1; 2; 3; 15"])
+        codas_reader.printHeader()
+        codas_reader.printTrailer()
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)
     sys.exit()
