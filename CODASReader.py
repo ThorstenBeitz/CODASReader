@@ -13,6 +13,7 @@ class CODASReader:
     It is recommended not to change this as the header must be read
     before any other part of the file can be processed."""
 
+    location = ""
     bytes_in_file = 0
     header = []
     adc_data = []
@@ -25,7 +26,8 @@ class CODASReader:
     adc_data_bytes = 0
 
     def __init__(self, location, read_header=True):
-        bin_data = open(location, "rb")
+        self.location = location
+        bin_data = open(self.location, "rb")
         # determining total length of file in bytes
         bin_data.seek(0, 2)
         self.bytes_in_file = bin_data.tell()
@@ -43,7 +45,7 @@ class CODASReader:
         CODASReader object. \n
         The header must be read before any other part of the file can
         be read."""
-        bin_data = open(location, "rb")
+        bin_data = open(self.location, "rb")
         bin_data.seek(0, 0)
 
         # format strings for first 33 elements of header,
@@ -207,7 +209,7 @@ class CODASReader:
         else:
             adc_bit_length = 14
         # opening file
-        bin_data = open(location, "rb")
+        bin_data = open(self.location, "rb")
         # determining start byte based on the start time given
         # self.header[12] stores time bewteen samples,
         # self.header[4] stores number of bytes in header
@@ -301,7 +303,7 @@ class CODASReader:
         if len(self.header) == 0:
             raise RuntimeError("Header has not been read or is empty"
                                + "Use 'readHeader' to read header")
-        bin_data = open(location, "rb")
+        bin_data = open(self.location, "rb")
         bin_data.seek(self.header[4] + self.adc_data_bytes, 0)
         # translating the trailer of the file
         self.trailer = []
