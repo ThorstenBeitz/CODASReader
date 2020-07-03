@@ -15,6 +15,7 @@ class CODASReader:
 
     location = ""
     bytes_in_file = 0
+    channels = []
     header = []
     adc_data = []
     adc_time_stamps = []
@@ -290,6 +291,8 @@ class CODASReader:
         if save_memory:
             for i, channel in enumerate(channels):
                 self.adc_scaling[i] = (self.header[33 + channel][2])
+        # saving channels numbers
+        self.channels = channels
 
         bin_data.close()
 
@@ -427,7 +430,9 @@ class CODASReader:
         Saves the ADC data of the file to a CSV file of name 'name'. \n
         First line of the file will be the header if any is given,
         otherwise it will be empty. \n
-        The second line will be the scaling factor for each channel
+        The second line will be the channel number corresponding to 
+        the channel that recorded the data in the column below. \n
+        The third line will be the scaling factor for each channel
         in the column of the respective channel data."""
         # np.savetxt(name, self.adc_data, delimiter = delim, fmt=fmt)
         # writing the adc data to a csv file item by item to save
@@ -438,9 +443,16 @@ class CODASReader:
                 file.write(str(item))
                 file.write(delim)
             file.write("\n")
+            # writing channel number for each column at the top of each
+            # column
+            for item in self.channels:
+                file.write(str(item))
+                file.write(delim)
+            file.write("\n")
             # writing the scaling factors at the top of the file
-            # scaling information for each channel will be first item
-            # in the column corresponding to that channel
+            # scaling information for each channel will be the second
+            # item in the column corresponding to that channel after
+            # the channel number
             for item in self.adc_scaling:
                 file.write(str(item))
                 file.write(delim)
@@ -607,7 +619,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--printStartTime", action="store_true",
                         help="Print start time of data acquesition")
     parser.add_argument("-d", "--duration", action="store_true",
-                        help="Print duration of data acquesition")
+                        help="Print duration of data acquesition in seconds")
     parser.add_argument("-r", "--rate", action="store_true",
                         help="Print sample rate")
     parser.add_argument("-a", "--acqChannels", action="store_true",
