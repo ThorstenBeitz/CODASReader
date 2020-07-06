@@ -46,7 +46,7 @@ CSV File format description:
   Second line:    channel number of data in column below (channel 1 = 0, ...)
   Third line:     scaling factor for data in column below
   
-  All subsequent lines are the adc data section adn the corresponding time stamps:
+  All subsequent lines are the adc data section and the corresponding time stamps:
     First column:       running timer since first data point in csv file (not since acquesition) in seconds
     Following columns:  data from each channel recorded, data corresponds to channel number in line 2 in the
                         same column and should be multiplied by scaling factor in line 3
