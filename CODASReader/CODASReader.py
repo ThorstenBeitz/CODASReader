@@ -1,8 +1,6 @@
 import struct
 import time
 import numpy as np
-import sys
-import traceback
 
 
 class CODASReader:
@@ -15,7 +13,9 @@ class CODASReader:
     It is recommended not to change this as the header must be read
     before any other part of the file can be processed."""
 
+    location = ""
     bytes_in_file = 0
+    channels = []
     header = []
     adc_data = []
     adc_time_stamps = []
@@ -27,7 +27,8 @@ class CODASReader:
     adc_data_bytes = 0
 
     def __init__(self, location, read_header=True):
-        bin_data = open(location, "rb")
+        self.location = location
+        bin_data = open(self.location, "rb")
         # determining total length of file in bytes
         bin_data.seek(0, 2)
         self.bytes_in_file = bin_data.tell()
@@ -41,11 +42,11 @@ class CODASReader:
     # must be run before reading the rest of the file.
     def readHeader(self):
         """Reads the header of the file. \n
-        This is done automatically by default when creating a new 
+        This is done automatically by default when creating a new
         CODASReader object. \n
         The header must be read before any other part of the file can
         be read."""
-        bin_data = open(location, "rb")
+        bin_data = open(self.location, "rb")
         bin_data.seek(0, 0)
 
         # format strings for first 33 elements of header,
@@ -168,7 +169,7 @@ class CODASReader:
             A list of all channels from which data should be read. \n
             The first channel has index 0. \n
             Default is reading all acquired channels. \n
-            Use 'printAcqChannels' to see number the number of 
+            Use 'printAcqChannels' to see number the number of
             acquired channels. \n
         start_time : float, optional \n
             Time in seconds since start of data acquesition at which
@@ -209,7 +210,7 @@ class CODASReader:
         else:
             adc_bit_length = 14
         # opening file
-        bin_data = open(location, "rb")
+        bin_data = open(self.location, "rb")
         # determining start byte based on the start time given
         # self.header[12] stores time bewteen samples,
         # self.header[4] stores number of bytes in header
@@ -290,6 +291,8 @@ class CODASReader:
         if save_memory:
             for i, channel in enumerate(channels):
                 self.adc_scaling[i] = (self.header[33 + channel][2])
+        # saving channels numbers
+        self.channels = channels
 
         bin_data.close()
 
@@ -303,7 +306,7 @@ class CODASReader:
         if len(self.header) == 0:
             raise RuntimeError("Header has not been read or is empty"
                                + "Use 'readHeader' to read header")
-        bin_data = open(location, "rb")
+        bin_data = open(self.location, "rb")
         bin_data.seek(self.header[4] + self.adc_data_bytes, 0)
         # translating the trailer of the file
         self.trailer = []
@@ -427,7 +430,9 @@ class CODASReader:
         Saves the ADC data of the file to a CSV file of name 'name'. \n
         First line of the file will be the header if any is given,
         otherwise it will be empty. \n
-        The second line will be the scaling factor for each channel
+        The second line will be the channel number corresponding to 
+        the channel that recorded the data in the column below. \n
+        The third line will be the scaling factor for each channel
         in the column of the respective channel data."""
         # np.savetxt(name, self.adc_data, delimiter = delim, fmt=fmt)
         # writing the adc data to a csv file item by item to save
@@ -438,21 +443,33 @@ class CODASReader:
                 file.write(str(item))
                 file.write(delim)
             file.write("\n")
+            # writing channel number for each column at the top of each
+            # column
+            file.write(delim)
+            for item in self.channels:
+                file.write(str(item))
+                file.write(delim)
+            file.write("\n")
             # writing the scaling factors at the top of the file
-            # scaling information for each channel will be first item
-            # in the column corresponding to that channel
+            # scaling information for each channel will be the second
+            # item in the column corresponding to that channel after
+            # the channel number
+            file.write(delim)
             for item in self.adc_scaling:
                 file.write(str(item))
                 file.write(delim)
             file.write("\n")
             # writing adc data and time stamps
             for i, item in enumerate(self.adc_data):
+                file.write(str(self.adc_time_stamps[i][-1]))
+                file.write(delim)
                 for seg in item:
                     file.write(str(seg))
                     file.write(delim)
-                for seg in self.adc_time_stamps[i]:
-                    file.write(seg)
-                    file.write(delim)
+                file.write(str(self.adc_time_stamps[i][0]))
+                file.write(delim)
+                file.write(str(self.adc_time_stamps[i][1]))
+                file.write(delim)
                 file.write("\n")
 
     # printing the trailer element of the file
@@ -587,22 +604,96 @@ class CODASReader:
 
 # only runs if program is run directly from file
 if __name__ == "__main__":
+
+    import sys
+    import traceback
+    import argparse
+    desc = """Read CODAS files and translate them to ASCII. The result
+    will be separated into the file header, the adc data and the file
+    trailer. The header and trailer can be printed to the console and
+    the adc data can be saved as a csv file."""
+    # setting up argparse with all needed arguments
+    parser = argparse.ArgumentParser(
+        description=desc,
+        formatter_class=argparse.MetavarTypeHelpFormatter)
+    parser.add_argument("file", type=str)
+    parser.add_argument("-H", "--header", action="store_true",
+                        help="Print header of CODAS file")
+    parser.add_argument("-t", "--trailer", action="store_true",
+                        help="Print trailer of CODAS file")
+    parser.add_argument("-p", "--printStartTime", action="store_true",
+                        help="Print start time of data acquesition")
+    parser.add_argument("-d", "--duration", action="store_true",
+                        help="Print duration of data acquesition in seconds")
+    parser.add_argument("-r", "--rate", action="store_true",
+                        help="Print sample rate")
+    parser.add_argument("-a", "--acqChannels", action="store_true",
+                        help="Print number of acquired channels")
+    parser.add_argument("-s", "--saveADC", action="store_true",
+                        help="Save ADC data to csv, required for arguments below")
+    parser.add_argument("-c", "--channel", type=int, action="append",
+                        help="Add a channel to be read (default: all)")
+    parser.add_argument("-b", "--beginTime", type=float,
+                        help="""Time in seconds since start of data
+                        acquesition at which the first ADC data should
+                        be read. (default: 0)""")
+    parser.add_argument("-e", "--endTime", type=float,
+                        help="""Time in seconds since start of data
+                        acquesition at which the last ADC data should
+                        be read. (default: until last entry)""")
+    parser.add_argument("-n", "--name", type=str,
+                        help="""Name for the produced ADC data csv file
+                        (default: 'name of file'.csv)""")
+    parser.add_argument("-f", "--fileHeader", type=str, action="append",
+                        help="""Add an element to the header of the csv file
+                        (default: Samples per second = 'sample rate')""")
+    input_args = parser.parse_args()
+
+    # setting file location to entered file location and reading
+    # header and trailer first (header read automatically)
+    location = input_args.file
     try:
-        # add code here for operating program from this file
-        location = "Desktop/BinaryReader/Files/Imprinetta-20180222-T1.wdq"
         codas_reader = CODASReader(location)
-        channels = [0, 1, 2, 3, 15]
-        codas_reader.readADC(channels=channels, start_time=1,
-                             end_time=5)
         codas_reader.readTrailer()
-        codas_reader.saveADCsToCSV(
-            "Desktop/BinaryReader/Files/output_test.csv",
-            header=["Samples per second = "
-                    + str(codas_reader.getSampleRate()),
-                    "Channels recorded = 0; 1; 2; 3; 15"])
-        codas_reader.printHeader()
-        codas_reader.printTrailer()
+        channels = None
+        header = header = ["Samples per second = "
+                           + str(codas_reader.getSampleRate())]
     except Exception:
         traceback.print_exc()
         sys.exit(1)
+    start_time = 0
+    end_time = None
+    name = location + ".csv"
+    # checking all possible command line arguments
+    if input_args.header:
+        codas_reader.printHeader()
+    if input_args.trailer:
+        codas_reader.printTrailer()
+    if input_args.printStartTime:
+        codas_reader.printAcqTime()
+    if input_args.duration:
+        codas_reader.printMeasurementTimeFrame()
+    if input_args.rate:
+        codas_reader.printSampleRate()
+    if input_args.acqChannels:
+        codas_reader.printAcqChannels()
+    if input_args.saveADC:
+        if input_args.channel:
+            channels = input_args.channel
+        if input_args.beginTime:
+            start_time = input_args.beginTime
+        if input_args.endTime:
+            end_time = input_args.endTime
+        if input_args.name:
+            name = input_args.name
+        if input_args.fileHeader:
+            header = input_args.fileHeader
+        try:
+            # read and print ADC data with appropriate options
+            codas_reader.readADC(channels=channels, start_time=start_time,
+                                end_time=end_time)
+            codas_reader.saveADCsToCSV(name=name, header=header)
+        except Exception:
+            traceback.print_exc()
+            sys.exit(1)
     sys.exit()

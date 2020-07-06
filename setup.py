@@ -11,6 +11,7 @@ setup(
     maintainer='John Quinn',
     maintainer_email='john.quinn@ucd.ie',
     packages=['CODASReader'],
+    scripts=['bin/codas.py'],
     license='LICENSE.txt',
     description='Python class to read CODAS files and translate to ASCII',
     long_description=open('README.txt').read(),
