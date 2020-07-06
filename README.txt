@@ -38,3 +38,17 @@ The command line arguments allow limited access to the api including:
   
 Additionally the ADC data can be read and save to a csv file.
 Using additional arguments, the channels that should be read, the time frame, the name of the csv file and a custom header for the file can be specified.
+
+###########################################################################
+
+CSV File format description:
+  First line:     custom header
+  Second line:    channel number of data in column below (channel 1 = 0, ...)
+  Third line:     scaling factor for data in column below
+  
+  All subsequent lines are the adc data section adn the corresponding time stamps:
+    First column:       running timer since first data point in csv file (not since acquesition) in seconds
+    Following columns:  data from each channel recorded, data corresponds to channel number in line 2 in the
+                        same column and should be multiplied by scaling factor in line 3
+    penultimate column: date of recording of data points on this line
+    last column:        UTC time of recording of data points on this line, accurate to 1 second
