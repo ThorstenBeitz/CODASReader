@@ -445,6 +445,7 @@ class CODASReader:
             file.write("\n")
             # writing channel number for each column at the top of each
             # column
+            file.write(delim)
             for item in self.channels:
                 file.write(str(item))
                 file.write(delim)
@@ -453,18 +454,22 @@ class CODASReader:
             # scaling information for each channel will be the second
             # item in the column corresponding to that channel after
             # the channel number
+            file.write(delim)
             for item in self.adc_scaling:
                 file.write(str(item))
                 file.write(delim)
             file.write("\n")
             # writing adc data and time stamps
             for i, item in enumerate(self.adc_data):
+                file.write(str(self.adc_time_stamps[i][-1]))
+                file.write(delim)
                 for seg in item:
                     file.write(str(seg))
                     file.write(delim)
-                for seg in self.adc_time_stamps[i]:
-                    file.write(seg)
-                    file.write(delim)
+                file.write(str(self.adc_time_stamps[i][0]))
+                file.write(delim)
+                file.write(str(self.adc_time_stamps[i][1]))
+                file.write(delim)
                 file.write("\n")
 
     # printing the trailer element of the file
