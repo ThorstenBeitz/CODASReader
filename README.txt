@@ -3,6 +3,9 @@ Python library to read CODAS files and convert them to ASCII or use directly in 
 For information on the CODAS file format visit https://www.dataq.com/resources/techinfo/ff.htm
 or view the document in this folder.
 
+To install: pip install .
+To upgrade: pip install --upgrade .
+
 A CODAS file can be read by initializing a new CODASReader object, giving the file location / name as an argument.
 The header of the file will then be read automatically (this is the default, can be changed if so desired) and stored in the object.
 The header must always be read first before reading other parts of the file or accessing information from it.
