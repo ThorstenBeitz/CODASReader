@@ -1,1 +1,1 @@
-import CODASReader
+from .CODASReader import CODASReader
