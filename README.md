@@ -70,9 +70,14 @@ __init__
 readHeader
   reads the file header
   ALWAYS call this before using further class methods,
+  does not need to be called if readHeader = true when initializing reader (Default)
 
 readADC
-  reads the ADC data section of the file
+  reads the ADC data section of the file.
+  call this before saveADCsToCSV.
+  Do not call this if you are simply inquiring information from the file header since reading
+  the ADC data typically takes some time and is not neccessary to use any of the methods
+  specified under additional methods for accessing header information.
   PARAMETERS:
         channels : int or array-like of int, optional
             Must be able to be converted into a numpy array.
@@ -98,15 +103,16 @@ readADC
             and / or for systems with limited ram.
     
 readTrailer
-  reads the file trailer
+  reads the file trailer-
+  call this before printTrailer
   
 printHeader
   prints the file header with the name of each element where available and respecitve values
   for more information on what each header element means, read the CODAS file dormat document
   
 saveADCsToCSV
-  saves the ADC data to a CSV file of given name
-  the layout of the produced CSV file can be seen above
+  saves the ADC data to a CSV file of given name.
+  the layout of the produced CSV file can be seen above.
   PARAMETERS:
     name : str
       Name of the CSV file the ouput will be saved to
@@ -125,6 +131,7 @@ printChannelInfo
     number: int or list of int, optional
       Channel number(s) of channels that should be printed.
       Default is all channels.
+      
       
 --Additional methods for accessing header information--
   All following methods print or return different information stored in the file header.
