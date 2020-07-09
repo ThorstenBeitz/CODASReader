@@ -13,7 +13,8 @@ The CODASReader class includes separate functions to read the file's ADC data se
 When reading the ADC data, the channels that should be read, as well as the time frame can be passed on as optional arguments.  
 The readADC function also includes a saveMemory mode which is turned on by default.  
 This reads and stores the data as a 16 bit integer and saves the scaling factor for each channel separately.  
-It is completely lossless and it is neccessary for reading large files at once.  
+It is completely lossless and it is neccessary for reading large files at once if system RAM is limited.  
+If storing the data as float directly is neccessary, save_memory can be set to False.  
 
 After reading the different sections of the CODAS file, information from the header can be printed or returned using the respective functions.  
 Information that can be otained this way include:  
@@ -53,8 +54,8 @@ CSV File format description:
 &emsp;&emsp;&emsp;&emsp;First column:       running timer since first data point in csv file (not since acquesition) in seconds  
 &emsp;&emsp;&emsp;&emsp;Following columns:  data from each channel recorded, data corresponds to channel number in line 2 in the  
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;                   same column and should be multiplied by scaling factor in line 3  
-&emsp;&emsp;&emsp;&emsp;penultimate column: date of recording of data points on this line  
-&emsp;&emsp;&emsp;&emsp;last column:        UTC time of recording of data points on this line, accurate to 1 second  
+&emsp;&emsp;&emsp;&emsp;penultimate column: date of recording of data points on this line (format: mm-dd-yyyy)  
+&emsp;&emsp;&emsp;&emsp;last column:        Time of recording of data points on this line, accurate to 1 second (UTC or Arizona time)  
     
 ############################################################################  
 
@@ -95,12 +96,20 @@ readADC
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;the last ADC data should be read.  
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Default is until end of ADC data section in file.  
 &emsp;&emsp;&emsp;&emsp;save_memory : bool, optional  
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Decides whether the scaling factor is applied to the data  
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;before it is saved to the array  
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;or if the scaling factor is saved in a separate array.  
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Default is True.  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Decides whether the scaling factor is applied to the data    
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;or if the scaling factor is saved in a separate array  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;before it is saved to the array   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;If true, the data will be saved as int16, which is the  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;way it is natively stored in the file  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;(no loss of information)  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;If false, the data is stored as float.    
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Default is True   
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;It is recommended to use save_memory = True for large files  
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;and / or for systems with limited ram.  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;and / or for systems with limited ram.   
+&emsp;&emsp;&emsp;&emsp;az_time: bool, optional    
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Decides whether the time stamps are in UTC or in   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Arizona local time (VERITAS telescope location)   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Default is False (UTC time)   
     
 readTrailer  
 &emsp;&emsp;reads the file trailer-  
