@@ -13,7 +13,8 @@ The CODASReader class includes separate functions to read the file's ADC data se
 When reading the ADC data, the channels that should be read, as well as the time frame can be passed on as optional arguments.
 The readADC function also includes a saveMemory mode which is turned on by default.
 This reads and stores the data as a 16 bit integer and saves the scaling factor for each channel separately.
-It is completely lossless and it is neccessary for reading large files at once.
+It is completely lossless and it is neccessary for reading large files at once if system RAM is limited.
+If storing the data as float directly is neccessary, save_memory can be set to False.
 
 After reading the different sections of the CODAS file, information from the header can be printed or returned using the respective functions.
 Information that can be otained this way include:
@@ -53,5 +54,5 @@ CSV File format description:
     First column:       running timer since first data point in csv file (not since acquesition) in seconds
     Following columns:  data from each channel recorded, data corresponds to channel number in line 2 in the
                         same column and should be multiplied by scaling factor in line 3
-    penultimate column: date of recording of data points on this line
-    last column:        UTC time of recording of data points on this line, accurate to 1 second
+    penultimate column: date of recording of data points on this line (format: mm-dd-yyyy)
+    last column:        Time of recording of data points on this line, accurate to 1 second (UTC or Arizona time)
