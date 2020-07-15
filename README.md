@@ -153,9 +153,15 @@ printADCDataLength
 
 printAcqTime  
 &emsp;&emsp;prints start time and date of data acquesition  
+&emsp;&emsp;PARAMETERS:   
+&emsp;&emsp;&emsp;&emsp;az_time: bool, optional   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Determines whether time is Arizona local time or UTC (default: Arizona time)   
 
 printFinishTime  
 &emsp;&emsp;prints end time and date of data acquesition  
+&emsp;&emsp;PARAMETERS:   
+&emsp;&emsp;&emsp;&emsp;az_time: bool, optional   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Determines whether time is Arizona local time or UTC (default: Arizona time)   
 
 printMeasurementTimeFrame  
 &emsp;&emsp;prints length of data acquesition in seconds  
@@ -178,9 +184,15 @@ getADCDataLength
 
 getAcqTime  
 &emsp;&emsp;return start time and date of data acquesition  
+&emsp;&emsp;PARAMETERS:   
+&emsp;&emsp;&emsp;&emsp;az_time: bool, optional   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Determines whether time is Arizona local time or UTC (default: Arizona time)   
 
 getFinishTime  
 &emsp;&emsp;return end time and date of data acquesition  
+&emsp;&emsp;PARAMETERS:   
+&emsp;&emsp;&emsp;&emsp;az_time: bool, optional   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Determines whether time is Arizona local time or UTC (default: Arizona time)   
 
 getMeasurementTimeFrame  
 &emsp;&emsp;return length of data acquesition in seconds  
